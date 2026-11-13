@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Muhasebe">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#eef1f4">
+<title>Cillo’s Muhasebe</title>
+<style>
+:root{
+  --bg:#eef1f4; --ink:#1b2430; --mute:#5d6b7a; --line:#d5dbe2; --surface:#fff;
+  --card:#1f5fbf; --cash:#1e7b4f; --out:#b3372d;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#12171d; --ink:#eef1f4; --mute:#9aa7b5; --line:#2a333d; --surface:#1b222a;
+    --card:#5b95ea; --cash:#4fbf87; --out:#ef7b70;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;max-width:560px;margin:0 auto;padding:16px 16px 40px}
+h1{font-size:20px;margin:4px 0 12px;font-weight:700}
+.month{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.month button{background:none;border:0;font-size:24px;color:var(--ink);padding:6px 14px;min-height:44px}
+.month strong{font-size:17px}
+.sum{background:var(--surface);border-radius:14px;padding:14px 16px;margin-bottom:14px}
+.sum .row{display:flex;justify-content:space-between;padding:4px 0}
+.sum .row span:first-child{color:var(--mute)}
+.sum .net{border-top:1px solid var(--line);margin-top:6px;padding-top:10px;font-weight:700;font-size:19px}
+.sum .net span:first-child{color:var(--ink)}
+.btns{display:grid;gap:10px;margin-bottom:20px}
+.btns button{border:0;border-radius:14px;color:#fff;font-size:19px;font-weight:700;min-height:64px;text-align:left;padding:0 18px;display:flex;justify-content:space-between;align-items:center}
+.btns button small{font-weight:500;font-size:14px;opacity:.9}
+.b-card{background:#1f5fbf}.b-cash{background:#1e7b4f}.b-out{background:#b3372d}
+h2{font-size:15px;color:var(--mute);margin:18px 0 6px;font-weight:600}
+.item{display:flex;justify-content:space-between;align-items:center;background:var(--surface);padding:12px 14px;border-bottom:1px solid var(--line);width:100%;border-left:0;border-right:0;border-top:0;color:var(--ink);font:inherit;text-align:left}
+.item:first-of-type{border-radius:12px 12px 0 0}
+.item:last-child{border-radius:0 0 12px 12px;border-bottom:0}
+.item:only-child{border-radius:12px}
+.item .t{font-weight:600}
+.item .n{color:var(--mute);font-size:14px}
+.amt.in-card{color:var(--card)}.amt.in-cash{color:var(--cash)}.amt.out{color:var(--out)}
+.amt{font-weight:700;white-space:nowrap;margin-left:10px}
+.empty{color:var(--mute);padding:14px 0}
+.tools{margin-top:26px;display:flex;gap:10px}
+.tools button{flex:1;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;min-height:44px;font:inherit}
+.veil{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:5}
+.veil.open{display:flex}
+.sheet{background:var(--surface);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px))}
+.sheet h3{margin:0 0 12px;font-size:18px}
+.sheet label{display:block;color:var(--mute);font-size:14px;margin:10px 0 4px}
+.sheet input{width:100%;font:inherit;font-size:18px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.sheet input#amt{font-size:28px;font-weight:700}
+.sheet .go{display:flex;gap:10px;margin-top:16px}
+.sheet .go button{flex:1;min-height:52px;border-radius:12px;border:0;font:inherit;font-size:17px;font-weight:700}
+.sheet .cancel{background:var(--bg);color:var(--ink)}
+.sheet .save{color:#fff}
+button:focus-visible,input:focus-visible{outline:3px solid #7aa7ff;outline-offset:2px}
+</style>
+</head>
+<body>
+<h1>Cillo’s Muhasebe</h1>
+
+<div class="month">
+  <button id="prev" aria-label="Önceki ay">‹</button>
+  <strong id="mlabel"></strong>
+  <button id="next" aria-label="Sonraki ay">›</button>
+</div>
+
+<div class="sum" id="sum"></div>
+
+<div class="btns">
+  <button class="b-card" data-type="gelir-card">Gelir Card <small>+ ekle</small></button>
+  <button class="b-cash" data-type="gelir-cash">Gelir Cash <small>+ ekle</small></button>
+  <button class="b-out" data-type="gider-cash">Gider Cash <small>− ekle</small></button>
+</div>
+
+<div id="list"></div>
+
+<div class="tools">
+  <button id="csv">CSV yedek al</button>
+</div>
+
+<div class="veil" id="veil">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="stitle">
+    <h3 id="stitle"></h3>
+    <label for="amt">Tutar (CHF)</label>
+    <input id="amt" type="text" inputmode="decimal" placeholder="0.00" autocomplete="off">
+    <label for="note">Not (isteğe bağlı)</label>
+    <input id="note" type="text" autocomplete="off">
+    <label for="date">Tarih</label>
+    <input id="date" type="date">
+    <div class="go">
+      <button class="cancel" id="cancel">Vazgeç</button>
+      <button class="save" id="save">Kaydet</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const LABELS = {
+  'gelir-card': {name:'Gelir Card', cls:'in-card', sign:1, color:'#1f5fbf'},
+  'gelir-cash': {name:'Gelir Cash', cls:'in-cash', sign:1, color:'#1e7b4f'},
+  'gider-cash': {name:'Gider Cash', cls:'out', sign:-1, color:'#b3372d'}
+};
+const KEY = 'cillos-muhasebe-v1';
+let entries = [];
+try { entries = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { entries = []; }
+function persist(){ try { localStorage.setItem(KEY, JSON.stringify(entries)); } catch (e) {} }
+
+const pad = n => String(n).padStart(2,'0');
+const ymd = d => d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
+const chf = n => n.toLocaleString('de-CH', {minimumFractionDigits:2, maximumFractionDigits:2});
+const MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
+let view = new Date(); view.setDate(1);
+let currentType = null;
+
+function render(){
+  const ym = view.getFullYear() + '-' + pad(view.getMonth()+1);
+  document.getElementById('mlabel').textContent = MONTHS[view.getMonth()] + ' ' + view.getFullYear();
+  const list = entries.filter(e => e.date.startsWith(ym)).sort((a,b) => b.date.localeCompare(a.date) || b.ts - a.ts);
+  const sum = t => list.filter(e => e.type === t).reduce((s,e) => s + e.amount, 0);
+  const card = sum('gelir-card'), cash = sum('gelir-cash'), out = sum('gider-cash');
+  document.getElementById('sum').innerHTML =
+    '<div class="row"><span>Gelir Card</span><span>' + chf(card) + '</span></div>' +
+    '<div class="row"><span>Gelir Cash</span><span>' + chf(cash) + '</span></div>' +
+    '<div class="row"><span>Gider Cash</span><span>' + chf(out) + '</span></div>' +
+    '<div class="row"><span>Kasa (nakit)</span><span>' + chf(cash - out) + '</span></div>' +
+    '<div class="row net"><span>Net kâr</span><span>CHF ' + chf(card + cash - out) + '</span></div>';
+
+  const box = document.getElementById('list');
+  if (!list.length) { box.innerHTML = '<p class="empty">Bu ay kayıt yok. Yukarıdaki düğmelerden ekle.</p>'; return; }
+  let html = '', last = '';
+  list.forEach(e => {
+    if (e.date !== last) {
+      if (last) html += '</div>';
+      const [y,m,d] = e.date.split('-');
+      html += '<h2>' + d + '.' + m + '.' + y + '</h2><div>';
+      last = e.date;
+    }
+    const L = LABELS[e.type];
+    const note = e.note ? '<div class="n">' + esc(e.note) + '</div>' : '';
+    html += '<button class="item" data-id="' + e.id + '"><span><span class="t">' + L.name + '</span>' + note + '</span>' +
+            '<span class="amt ' + L.cls + '">' + (L.sign < 0 ? '−' : '+') + chf(e.amount) + '</span></button>';
+  });
+  box.innerHTML = html + '</div>';
+}
+function esc(s){ return s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+const veil = document.getElementById('veil');
+function openSheet(type){
+  currentType = type;
+  const L = LABELS[type];
+  document.getElementById('stitle').textContent = L.name;
+  document.getElementById('save').style.background = L.color;
+  document.getElementById('amt').value = '';
+  document.getElementById('note').value = '';
+  document.getElementById('date').value = ymd(new Date());
+  veil.classList.add('open');
+  setTimeout(() => document.getElementById('amt').focus(), 50);
+}
+function closeSheet(){ veil.classList.remove('open'); }
+
+document.querySelectorAll('.btns button').forEach(b => b.addEventListener('click', () => openSheet(b.dataset.type)));
+document.getElementById('cancel').addEventListener('click', closeSheet);
+veil.addEventListener('click', e => { if (e.target === veil) closeSheet(); });
+
+document.getElementById('save').addEventListener('click', () => {
+  const raw = document.getElementById('amt').value.replace(',', '.').trim();
+  const amount = parseFloat(raw);
+  if (!(amount > 0)) { document.getElementById('amt').focus(); return; }
+  const date = document.getElementById('date').value || ymd(new Date());
+  entries.push({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+    type: currentType,
+    amount: Math.round(amount * 100) / 100,
+    note: document.getElementById('note').value.trim(),
+    date: date,
+    ts: Date.now()
+  });
+  persist();
+  closeSheet();
+  const d = new Date(date + 'T00:00:00'); view = new Date(d.getFullYear(), d.getMonth(), 1);
+  render();
+});
+
+document.getElementById('list').addEventListener('click', e => {
+  const b = e.target.closest('.item'); if (!b) return;
+  const en = entries.find(x => x.id === b.dataset.id); if (!en) return;
+  if (confirm(LABELS[en.type].name + ' — CHF ' + chf(en.amount) + '\nBu kaydı silmek istiyor musun?')) {
+    entries = entries.filter(x => x.id !== en.id); persist(); render();
+  }
+});
+
+document.getElementById('prev').addEventListener('click', () => { view = new Date(view.getFullYear(), view.getMonth()-1, 1); render(); });
+document.getElementById('next').addEventListener('click', () => { view = new Date(view.getFullYear(), view.getMonth()+1, 1); render(); });
+
+document.getElementById('csv').addEventListener('click', () => {
+  const rows = [['Tarih','Tür','Tutar CHF','Not']].concat(
+    entries.slice().sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts)
+      .map(e => [e.date, LABELS[e.type].name, e.amount.toFixed(2), '"' + e.note.replace(/"/g,'""') + '"']));
+  const blob = new Blob(['\ufeff' + rows.map(r => r.join(';')).join('\n')], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'muhasebe-yedek.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+render();
+</script>
+</body>
+</html>
