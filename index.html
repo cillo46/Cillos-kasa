@@ -100,6 +100,8 @@ button:focus-visible,input:focus-visible{outline:3px solid #7aa7ff;outline-offse
 .report .bar button{flex:1;min-height:48px;border-radius:10px;border:0;font:inherit;font-weight:700;background:#1f5fbf;color:#fff}
 .report .bar .x{background:#e6e9ee;color:#111}
 .report .bar .on{background:#1b2430;color:#fff}
+.report .bar{gap:6px}
+.report .bar button{font-size:14px;padding:0 4px}
 .report h2.rt{font-size:18px;color:#111;margin:8px 0 4px}
 .report p.sub{margin:0 0 12px;color:#444;font-size:13px}
 .report .tw{overflow-x:auto}
@@ -314,9 +316,9 @@ const dmy = d => { const p = d.split('-'); return p[2] + '.' + p[1] + '.' + p[0]
 function mm(a){ if(!a.length) return ['–','–']; const v = a.map(e => e.amount); return [chf(Math.min.apply(null,v)), chf(Math.max.apply(null,v))]; }
 const rep = document.getElementById('report');
 function openReport(mode){
-  mode = mode === 'month' ? 'month' : 'day';
-  const ym = day.slice(0,7);
-  const list = entries.filter(e => mode === 'month' ? e.date.startsWith(ym) : e.date === day).sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts);
+  mode = (mode === 'month' || mode === 'year') ? mode : 'day';
+  const ym = day.slice(0,7), yy = day.slice(0,4);
+  const list = entries.filter(e => mode === 'year' ? e.date.startsWith(yy) : mode === 'month' ? e.date.startsWith(ym) : e.date === day).sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts);
   const by = t => list.filter(e => e.type === t);
   const card = by('gelir-card'), cash = by('gelir-cash'), out = by('gider-cash');
   const tot = a => a.reduce((s,e) => s + e.amount, 0);
@@ -333,24 +335,30 @@ function openReport(mode){
   incAll.forEach(e => { days[e.date] = (days[e.date] || 0) + e.amount; });
   const dk = Object.keys(days).sort((a,b) => days[a] - days[b]);
   let dayTxt = '';
-  if (mode === 'month' && dk.length) {
+  if (mode !== 'day' && dk.length) {
     const hi = dk[dk.length-1], lo = dk[0];
     dayTxt = '<p class="sub">En çok gelir günü: <b>' + dmy(hi) + ' – CHF ' + chf(days[hi]) + '</b><br>En az gelir günü: <b>' + dmy(lo) + ' – CHF ' + chf(days[lo]) + '</b></p>';
   }
+  if (mode === 'year') {
+    const mt = {}; incAll.forEach(e => { const k = e.date.slice(0,7); mt[k] = (mt[k] || 0) + e.amount; });
+    const mk = Object.keys(mt).sort((a,b) => mt[a] - mt[b]);
+    if (mk.length) { const mh = mk[mk.length-1], ml = mk[0];
+      dayTxt += '<p class="sub">En çok gelir ayı: <b>' + MONTHS[+mh.slice(5)-1] + ' – CHF ' + chf(mt[mh]) + '</b><br>En az gelir ayı: <b>' + MONTHS[+ml.slice(5)-1] + ' – CHF ' + chf(mt[ml]) + '</b></p>'; }
+  }
   const byDay = {};
-  list.forEach(e => { const r = byDay[e.date] || (byDay[e.date] = {c:0,h:0,o:0,n:[]}); if (e.type === 'gelir-card') r.c += e.amount; else if (e.type === 'gelir-cash') r.h += e.amount; else { r.o += e.amount; r.n.push((e.note || 'Gider') + ' ' + chf(e.amount)); } });
+  list.forEach(e => { const kk = mode === 'year' ? e.date.slice(0,7) : e.date; const r = byDay[kk] || (byDay[kk] = {c:0,h:0,o:0,n:[]}); if (e.type === 'gelir-card') r.c += e.amount; else if (e.type === 'gelir-cash') r.h += e.amount; else { r.o += e.amount; r.n.push((e.note || 'Gider') + ' ' + chf(e.amount)); } });
   const dkeys = Object.keys(byDay).sort();
   const dash = v => v ? chf(v) : '–';
-  const drow = (label, r, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td><td>' + dash(r.c) + '</td><td>' + dash(r.h) + '</td><td>' + (r.o ? '−' + chf(r.o) : '–') + '</td><td>' + chf(r.h - r.o) + '</td><td>' + (r.n && r.n.length ? esc(r.n.join('; ')) : '–') + '</td></tr>';
+  const drow = (label, r, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + label + '</td><td>' + dash(r.c) + '</td><td>' + dash(r.h) + '</td><td>' + (r.o ? '−' + chf(r.o) : '–') + '</td><td>' + chf(r.h - r.o) + '</td><td>' + (r.n && r.n.length ? (mode === 'year' ? r.n.length + ' kalem' : esc(r.n.join('; '))) : '–') + '</td></tr>';
   const sumAll = {c: sc, h: sh, o: so};
-  const ent = dkeys.map(k => drow(dmy(k), byDay[k])).join('') + (dkeys.length > 1 ? drow('Toplam', sumAll, 'tot') : '') || '<tr><td colspan="6">Kayıt yok</td></tr>';
+  const ent = dkeys.map(k => drow(mode === 'year' ? MONTHS[+k.slice(5)-1] : dmy(k), byDay[k])).join('') + (dkeys.length > 1 ? drow('Toplam', sumAll, 'tot') : '') || '<tr><td colspan="6">Kayıt yok</td></tr>';
   rep.innerHTML =
-    '<div class="bar"><button id="rpdf">PDF kaydet</button><button class="' + (mode === 'day' ? 'on' : 'x') + '" id="rday">Gün</button><button class="' + (mode === 'month' ? 'on' : 'x') + '" id="rmonth">Ay</button><button class="x" id="rx">Kapat</button></div>' +
-    '<h2 class="rt">Cillo’s – ' + (mode === 'month' ? 'Aylık rapor' : 'Günlük rapor') + '</h2><p class="sub">' + (mode === 'month' ? MONTHS[+ym.slice(5) - 1] + ' ' + ym.slice(0,4) : dmy(day) + ' · ' + DOW[new Date(day + 'T00:00:00').getDay()]) + ' · Tutarlar CHF</p>' +
+    '<div class="bar"><button id="rpdf">PDF kaydet</button><button class="' + (mode === 'day' ? 'on' : 'x') + '" id="rday">Gün</button><button class="' + (mode === 'month' ? 'on' : 'x') + '" id="rmonth">Ay</button><button class="' + (mode === 'year' ? 'on' : 'x') + '" id="ryear">Yıl</button><button class="x" id="rx">Kapat</button></div>' +
+    '<h2 class="rt">Cillo’s – ' + (mode === 'year' ? 'Yıllık rapor' : mode === 'month' ? 'Aylık rapor' : 'Günlük rapor') + '</h2><p class="sub">' + (mode === 'year' ? yy : mode === 'month' ? MONTHS[+ym.slice(5) - 1] + ' ' + ym.slice(0,4) : dmy(day) + ' · ' + DOW[new Date(day + 'T00:00:00').getDay()]) + ' · Tutarlar CHF</p>' +
     '<div class="tw"><table><thead><tr><th>Tür</th><th>Adet</th><th>Toplam</th><th>Oran</th><th>En az</th><th>En çok</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
     dayTxt +
     '<p class="sub">Oran: Card ve Cash, toplam gelirdeki payı. Gider ve Cash kalan, Cash gelirine oranı. En az / En çok: tek kayıtların en küçük ve en büyük tutarı.</p>' +
-    '<h2 class="rt">Günlük kayıtlar</h2><div class="tw"><table class="ent"><thead><tr><th>Tarih</th><th>Gelir Card</th><th>Gelir Cash</th><th>Gider Cash</th><th>Cash kalan</th><th>Gider açıklaması</th></tr></thead><tbody>' + ent + '</tbody></table></div>';
+    '<h2 class="rt">' + (mode === 'year' ? 'Aylık kayıtlar' : 'Günlük kayıtlar') + '</h2><div class="tw"><table class="ent"><thead><tr><th>' + (mode === 'year' ? 'Ay' : 'Tarih') + '</th><th>Gelir Card</th><th>Gelir Cash</th><th>Gider Cash</th><th>Cash kalan</th><th>' + (mode === 'year' ? 'Gider adedi' : 'Gider açıklaması') + '</th></tr></thead><tbody>' + ent + '</tbody></table></div>';
   rep.classList.add('open');
   rep.scrollTop = 0;
 }
@@ -358,6 +366,7 @@ rep.addEventListener('click', e => {
   if (e.target.id === 'rpdf') window.print();
   if (e.target.id === 'rday') openReport('day');
   if (e.target.id === 'rmonth') openReport('month');
+  if (e.target.id === 'ryear') openReport('year');
   if (e.target.id === 'rx') rep.classList.remove('open');
 });
 document.getElementById('pdf').addEventListener('click', () => openReport('day'));
