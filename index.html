@@ -71,6 +71,18 @@ body{background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacS
 .hint{color:var(--mute);font-size:12px;text-align:center;margin:10px 0 0}
 .del{border:0;background:var(--tint-out);color:var(--out);border-radius:12px;min-width:48px;min-height:44px;font:inherit;font-size:13px;font-weight:700;padding:0 12px;flex:none}
 .del.ask{background:var(--out);color:#fff}
+.lock{position:fixed;inset:0;z-index:50;background:var(--bg);display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px}
+.lock.on{display:flex}
+.lock img{height:44px;width:auto;background:#fff;border-radius:12px;padding:6px 12px}
+.lock h2{margin:0;font-size:20px;color:var(--ink)}
+.lock .dots{display:flex;gap:12px;height:18px}
+.lock .dots i{width:16px;height:16px;border-radius:50%;border:2px solid var(--mute)}
+.lock .dots i.f{background:var(--ink);border-color:var(--ink)}
+.lock .msg{min-height:20px;color:var(--out);font-size:14px;margin:0;text-align:center}
+.pad{display:grid;grid-template-columns:repeat(3,78px);gap:14px}
+.pad button{height:78px;border-radius:50%;border:0;background:var(--surface);color:var(--ink);font:inherit;font-size:28px;font-weight:600}
+.pad button.sp{background:transparent;font-size:22px;color:var(--mute)}
+@media print{.lock{display:none!important}}
 .rtxt{color:var(--mute);font-size:14px;margin:0 0 4px}
 .rbtn{width:100%;min-height:56px;border:0;border-radius:16px;background:var(--tint-out);color:var(--out);font:inherit;font-size:16px;font-weight:700;margin-top:10px}
 .rbtn.ask{background:var(--out);color:#fff}
@@ -137,6 +149,7 @@ body>*:not(.report){display:none!important}
   <div class="acts">
     <button id="pdf">PDF rapor</button>
     <button id="csv">CSV yedek</button>
+    <button id="lockbtn" aria-label="Kilitle">🔒</button>
   </div>
 </div>
 
@@ -174,6 +187,14 @@ body>*:not(.report){display:none!important}
       <button class="save" id="save">Kaydet</button>
     </div>
   </div>
+</div>
+
+<div class="lock on" id="lock">
+  <img id="limg" alt="Cillo’s">
+  <h2>PIN gir</h2>
+  <div class="dots" id="dots"></div>
+  <p class="msg" id="lmsg"></p>
+  <div class="pad" id="pad"></div>
 </div>
 
 <div class="veil" id="rveil">
@@ -395,6 +416,41 @@ rveil.addEventListener('click', e => { if (e.target === rveil) rveil.classList.r
   b.dataset.ask = '1'; b.className = 'rbtn ask';
   b.textContent = 'Emin misin? ' + b.dataset.n + ' kayıt silinecek';
 }));
+
+const PINS = [{n:'Ben', h:'09f2b75a0be8a1c526199f2658ee93a9e206c93e4a3ad44ba39cf7a07ef882ae'}];
+const SALT = 'cillos-kasa-v1:', PLEN = 4;
+const lockEl = document.getElementById('lock');
+document.getElementById('limg').src = document.querySelector('.top img').src;
+let buf = '', fails = 0, until = 0, hid = 0;
+const dotsEl = document.getElementById('dots'), lmsg = document.getElementById('lmsg');
+function drawDots(){ let h = ''; for (let i = 0; i < PLEN; i++) h += '<i class="' + (i < buf.length ? 'f' : '') + '"></i>'; dotsEl.innerHTML = h; }
+async function sha(t){ try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SALT + t)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''); } catch (e) { return ''; } }
+function unlock(){ try { sessionStorage.setItem('cm-ok','1'); } catch (e) {} lockEl.classList.remove('on'); buf = ''; drawDots(); lmsg.textContent = ''; }
+function lockNow(){ try { sessionStorage.removeItem('cm-ok'); } catch (e) {} buf = ''; drawDots(); lmsg.textContent = ''; lockEl.classList.add('on'); }
+async function press(k){
+  if (Date.now() < until) { lmsg.textContent = 'Çok fazla deneme. ' + Math.ceil((until - Date.now()) / 1000) + ' sn bekle.'; return; }
+  if (k === 'del') { buf = buf.slice(0,-1); drawDots(); return; }
+  if (buf.length >= PLEN) return;
+  buf += k; drawDots();
+  if (buf.length === PLEN) {
+    const h = await sha(buf);
+    if (h && PINS.some(p => p.h === h)) { fails = 0; unlock(); return; }
+    fails++; buf = ''; drawDots();
+    lmsg.textContent = h ? 'Yanlış PIN' : 'Bu tarayıcı PIN doğrulayamıyor';
+    if (fails >= 5) { until = Date.now() + 30000; fails = 0; lmsg.textContent = '5 yanlış deneme. 30 sn bekle.'; }
+  }
+}
+(function(){
+  let h = '';
+  ['1','2','3','4','5','6','7','8','9'].forEach(k => { h += '<button data-k="' + k + '">' + k + '</button>'; });
+  h += '<span></span><button data-k="0">0</button><button class="sp" data-k="del" aria-label="Sil">⌫</button>';
+  document.getElementById('pad').innerHTML = h;
+})();
+document.getElementById('pad').addEventListener('click', e => { const b = e.target.closest('button'); if (b) press(b.dataset.k); });
+document.getElementById('lockbtn').addEventListener('click', lockNow);
+document.addEventListener('visibilitychange', () => { if (document.hidden) hid = Date.now(); else if (hid && Date.now() - hid > 120000) lockNow(); });
+drawDots();
+try { if (sessionStorage.getItem('cm-ok') === '1') lockEl.classList.remove('on'); } catch (e) {}
 
 render();
 </script>
