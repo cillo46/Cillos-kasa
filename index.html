@@ -83,6 +83,10 @@ body{background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacS
 .pad button{height:78px;border-radius:50%;border:0;background:var(--surface);color:var(--ink);font:inherit;font-size:28px;font-weight:600}
 .pad button.sp{background:transparent;font-size:22px;color:var(--mute)}
 @media print{.lock{display:none!important}}
+.role-entry #pdf,.role-entry #csv,.role-entry .del,.role-entry #reset,.role-entry .daybar,.role-entry #sum,.role-entry label[for=date],.role-entry #date{display:none!important}
+.bk{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--tint-out);color:var(--out);border-radius:18px;padding:10px 14px;margin-bottom:12px;font-weight:600;font-size:14px}
+.bk button{border:0;background:var(--out);color:#fff;border-radius:999px;min-height:36px;padding:0 14px;font:inherit;font-weight:700;flex:none}
+.role-entry .bk{display:none!important}
 .rtxt{color:var(--mute);font-size:14px;margin:0 0 4px}
 .rbtn{width:100%;min-height:56px;border:0;border-radius:16px;background:var(--tint-out);color:var(--out);font:inherit;font-size:16px;font-weight:700;margin-top:10px}
 .rbtn.ask{background:var(--out);color:#fff}
@@ -162,6 +166,8 @@ body>*:not(.report){display:none!important}
   <button id="next" aria-label="Sonraki gün">›</button>
 </div>
 
+<div class="bk" id="bk"><span>Bugünkü yedek alınmadı</span><button id="bkbtn">Yedek al</button></div>
+
 <div class="sum" id="sum"></div>
 
 <div id="list"></div>
@@ -230,7 +236,15 @@ const DOW = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumart
 let currentType = null;
 function shiftDay(n){ const d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + n); day = ymd(d); render(); }
 
+function checkBackup(){
+  const el = document.getElementById('bk'); if (!el) return;
+  const n = new Date(); let last = '';
+  try { last = localStorage.getItem('cillos-last-backup') || ''; } catch (e) {}
+  const after = n.getHours() * 60 + n.getMinutes() >= 19 * 60 + 7;
+  el.style.display = (after && last !== ymd(n) && entries.length) ? 'flex' : 'none';
+}
 function render(){
+  checkBackup();
   const dd = new Date(day + 'T00:00:00');
   document.getElementById('jump').value = day;
   document.getElementById('dow').textContent = DOW[dd.getDay()];
@@ -290,7 +304,7 @@ document.getElementById('save').addEventListener('click', () => {
   const raw = document.getElementById('amt').value.replace(',', '.').trim();
   const amount = parseFloat(raw);
   if (!(amount > 0)) { document.getElementById('amt').focus(); return; }
-  const date = document.getElementById('date').value || ymd(new Date());
+  const date = document.body.classList.contains('role-entry') ? ymd(new Date()) : (document.getElementById('date').value || ymd(new Date()));
   entries.push({
     id: Date.now().toString(36) + Math.random().toString(36).slice(2,6),
     type: currentType,
@@ -306,6 +320,7 @@ document.getElementById('save').addEventListener('click', () => {
 });
 
 document.getElementById('list').addEventListener('click', e => {
+  if (document.body.classList.contains('role-entry')) return;
   const b = e.target.closest('.del'); if (!b) return;
   const en = entries.find(x => x.id === b.dataset.id); if (!en) return;
   if (b.dataset.ask === '1') {
@@ -323,6 +338,7 @@ document.getElementById('today').addEventListener('click', () => { day = ymd(new
 document.getElementById('jump').addEventListener('change', e => { if (e.target.value) { day = e.target.value; render(); } });
 
 document.getElementById('csv').addEventListener('click', () => {
+  if (document.body.classList.contains('role-entry')) return;
   const rows = [['Tarih','Tür','Tutar CHF','Not']].concat(
     entries.slice().sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts)
       .map(e => [e.date, LABELS[e.type].name, e.amount.toFixed(2), '"' + e.note.replace(/"/g,'""') + '"']));
@@ -330,6 +346,8 @@ document.getElementById('csv').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'muhasebe-yedek.csv';
   document.body.appendChild(a); a.click(); a.remove();
+  try { localStorage.setItem('cillos-last-backup', ymd(new Date())); } catch (e) {}
+  checkBackup();
 });
 
 const pctTxt = (a,b) => b > 0 ? (a/b*100).toFixed(1).replace('.', ',') + ' %' : '–';
@@ -337,6 +355,7 @@ const dmy = d => { const p = d.split('-'); return p[2] + '.' + p[1] + '.' + p[0]
 function mm(a){ if(!a.length) return ['–','–']; const v = a.map(e => e.amount); return [chf(Math.min.apply(null,v)), chf(Math.max.apply(null,v))]; }
 const rep = document.getElementById('report');
 function openReport(mode){
+  if (document.body.classList.contains('role-entry')) return;
   mode = (mode === 'month' || mode === 'year') ? mode : 'day';
   const ym = day.slice(0,7), yy = day.slice(0,4);
   const list = entries.filter(e => mode === 'year' ? e.date.startsWith(yy) : mode === 'month' ? e.date.startsWith(ym) : e.date === day).sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts);
@@ -404,7 +423,7 @@ function resetLabels(){
   rsy.textContent = 'Yıllık: ' + y + ' (' + ny + ' kayıt)';
   rsm.disabled = !nm; rsy.disabled = !ny;
 }
-document.getElementById('reset').addEventListener('click', () => { resetLabels(); rveil.classList.add('open'); });
+document.getElementById('reset').addEventListener('click', () => { if (document.body.classList.contains('role-entry')) return; resetLabels(); rveil.classList.add('open'); });
 document.getElementById('rcancel').addEventListener('click', () => rveil.classList.remove('open'));
 rveil.addEventListener('click', e => { if (e.target === rveil) rveil.classList.remove('open'); });
 [rsm, rsy].forEach(b => b.addEventListener('click', () => {
@@ -417,7 +436,7 @@ rveil.addEventListener('click', e => { if (e.target === rveil) rveil.classList.r
   b.textContent = 'Emin misin? ' + b.dataset.n + ' kayıt silinecek';
 }));
 
-const PINS = [{n:'Ben', h:'09f2b75a0be8a1c526199f2658ee93a9e206c93e4a3ad44ba39cf7a07ef882ae'}];
+const PINS = [{n:'Ben', h:'09f2b75a0be8a1c526199f2658ee93a9e206c93e4a3ad44ba39cf7a07ef882ae', r:'admin'}, {n:'Giriş', h:'a3d00e60a311f4579d0acd0755cdc271a0770595fa2ac2b52db41e51f9a21aa4', r:'entry'}];
 const SALT = 'cillos-kasa-v1:', PLEN = 4;
 const lockEl = document.getElementById('lock');
 document.getElementById('limg').src = document.querySelector('.top img').src;
@@ -425,7 +444,8 @@ let buf = '', fails = 0, until = 0, hid = 0;
 const dotsEl = document.getElementById('dots'), lmsg = document.getElementById('lmsg');
 function drawDots(){ let h = ''; for (let i = 0; i < PLEN; i++) h += '<i class="' + (i < buf.length ? 'f' : '') + '"></i>'; dotsEl.innerHTML = h; }
 async function sha(t){ try { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(SALT + t)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2,'0')).join(''); } catch (e) { return ''; } }
-function unlock(){ try { sessionStorage.setItem('cm-ok','1'); } catch (e) {} lockEl.classList.remove('on'); buf = ''; drawDots(); lmsg.textContent = ''; }
+function applyRole(r){ document.body.classList.toggle('role-entry', r !== 'admin'); if (r !== 'admin') { day = ymd(new Date()); render(); } }
+function unlock(r){ r = r || 'entry'; try { sessionStorage.setItem('cm-ok','1'); sessionStorage.setItem('cm-role', r); } catch (e) {} applyRole(r); lockEl.classList.remove('on'); buf = ''; drawDots(); lmsg.textContent = ''; }
 function lockNow(){ try { sessionStorage.removeItem('cm-ok'); } catch (e) {} buf = ''; drawDots(); lmsg.textContent = ''; lockEl.classList.add('on'); }
 async function press(k){
   if (Date.now() < until) { lmsg.textContent = 'Çok fazla deneme. ' + Math.ceil((until - Date.now()) / 1000) + ' sn bekle.'; return; }
@@ -434,7 +454,8 @@ async function press(k){
   buf += k; drawDots();
   if (buf.length === PLEN) {
     const h = await sha(buf);
-    if (h && PINS.some(p => p.h === h)) { fails = 0; unlock(); return; }
+    const hit = h && PINS.find(p => p.h === h);
+    if (hit) { fails = 0; unlock(hit.r); return; }
     fails++; buf = ''; drawDots();
     lmsg.textContent = h ? 'Yanlış PIN' : 'Bu tarayıcı PIN doğrulayamıyor';
     if (fails >= 5) { until = Date.now() + 30000; fails = 0; lmsg.textContent = '5 yanlış deneme. 30 sn bekle.'; }
@@ -448,9 +469,11 @@ async function press(k){
 })();
 document.getElementById('pad').addEventListener('click', e => { const b = e.target.closest('button'); if (b) press(b.dataset.k); });
 document.getElementById('lockbtn').addEventListener('click', lockNow);
-document.addEventListener('visibilitychange', () => { if (document.hidden) hid = Date.now(); else if (hid && Date.now() - hid > 120000) lockNow(); });
+document.addEventListener('visibilitychange', () => { if (document.hidden) hid = Date.now(); else { checkBackup(); if (hid && Date.now() - hid > 120000) lockNow(); } });
+document.getElementById('bkbtn').addEventListener('click', () => document.getElementById('csv').click());
+setInterval(checkBackup, 60000);
 drawDots();
-try { if (sessionStorage.getItem('cm-ok') === '1') lockEl.classList.remove('on'); } catch (e) {}
+try { if (sessionStorage.getItem('cm-ok') === '1') { applyRole(sessionStorage.getItem('cm-role') || 'entry'); lockEl.classList.remove('on'); } } catch (e) {}
 
 render();
 </script>
