@@ -87,6 +87,11 @@ body{background:var(--bg);color:var(--ink);font:16px/1.4 -apple-system,BlinkMacS
 .bk{display:none;align-items:center;justify-content:space-between;gap:10px;background:var(--tint-out);color:var(--out);border-radius:18px;padding:10px 14px;margin-bottom:12px;font-weight:600;font-size:14px}
 .bk button{border:0;background:var(--out);color:#fff;border-radius:999px;min-height:36px;padding:0 14px;font:inherit;font-weight:700;flex:none}
 .role-entry .bk{display:none!important}
+.snaps{margin-top:14px}
+.snaps h4{margin:0 0 6px;font-size:14px;color:var(--mute)}
+.snap{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.snap button{border:0;background:var(--tint-card);color:var(--card);border-radius:12px;min-height:40px;padding:0 12px;font:inherit;font-weight:700;flex:none}
+.snap button.ask{background:var(--card);color:#fff}
 .rtxt{color:var(--mute);font-size:14px;margin:0 0 4px}
 .rbtn{width:100%;min-height:56px;border:0;border-radius:16px;background:var(--tint-out);color:var(--out);font:inherit;font-size:16px;font-weight:700;margin-top:10px}
 .rbtn.ask{background:var(--out);color:#fff}
@@ -166,8 +171,6 @@ body>*:not(.report){display:none!important}
   <button id="next" aria-label="Sonraki gün">›</button>
 </div>
 
-<div class="bk" id="bk"><span>Bugünkü yedek alınmadı</span><button id="bkbtn">Yedek al</button></div>
-
 <div class="sum" id="sum"></div>
 
 <div id="list"></div>
@@ -209,6 +212,7 @@ body>*:not(.report){display:none!important}
     <p class="rtxt">Seçili günün ayı ve yılı baz alınır. Silinen kayıtlar geri gelmez, önce CSV yedek almanı öneririm.</p>
     <button class="rbtn" id="rsm"></button>
     <button class="rbtn" id="rsy"></button>
+    <div class="snaps" id="snaps"></div>
     <div class="go"><button class="cancel" id="rcancel">Vazgeç</button></div>
   </div>
 </div>
@@ -236,12 +240,18 @@ const DOW = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumart
 let currentType = null;
 function shiftDay(n){ const d = new Date(day + 'T00:00:00'); d.setDate(d.getDate() + n); day = ymd(d); render(); }
 
+const SKEY = 'cillos-snaps-v1';
+function loadSnaps(){ try { return JSON.parse(localStorage.getItem(SKEY) || '[]'); } catch (e) { return []; } }
+function saveSnaps(a){ try { localStorage.setItem(SKEY, JSON.stringify(a.slice(-30))); } catch (e) {} }
+function snapshotNow(label, key){ const a = loadSnaps(); a.push({k: key || ('m' + Date.now()), d: ymd(new Date()), t: Date.now(), l: label, e: JSON.parse(JSON.stringify(entries))}); saveSnaps(a); }
 function checkBackup(){
-  const el = document.getElementById('bk'); if (!el) return;
-  const n = new Date(); let last = '';
-  try { last = localStorage.getItem('cillos-last-backup') || ''; } catch (e) {}
+  if (!entries.length) return;
+  const n = new Date();
   const after = n.getHours() * 60 + n.getMinutes() >= 19 * 60 + 7;
-  el.style.display = (after && last !== ymd(n) && entries.length) ? 'flex' : 'none';
+  const due = new Date(n); if (!after) due.setDate(due.getDate() - 1);
+  const key = 'auto-' + ymd(due);
+  if (loadSnaps().some(x => x.k === key)) return;
+  snapshotNow('Otomatik', key);
 }
 function render(){
   checkBackup();
@@ -346,8 +356,6 @@ document.getElementById('csv').addEventListener('click', () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'muhasebe-yedek.csv';
   document.body.appendChild(a); a.click(); a.remove();
-  try { localStorage.setItem('cillos-last-backup', ymd(new Date())); } catch (e) {}
-  checkBackup();
 });
 
 const pctTxt = (a,b) => b > 0 ? (a/b*100).toFixed(1).replace('.', ',') + ' %' : '–';
@@ -422,12 +430,30 @@ function resetLabels(){
   rsm.textContent = 'Aylık: ' + MONTHS[+ym.slice(5) - 1] + ' ' + y + ' (' + nm + ' kayıt)';
   rsy.textContent = 'Yıllık: ' + y + ' (' + ny + ' kayıt)';
   rsm.disabled = !nm; rsy.disabled = !ny;
+  renderSnaps();
 }
 document.getElementById('reset').addEventListener('click', () => { if (document.body.classList.contains('role-entry')) return; resetLabels(); rveil.classList.add('open'); });
+function renderSnaps(){
+  const a = loadSnaps().slice().reverse().slice(0, 6), el = document.getElementById('snaps');
+  if (!a.length) { el.innerHTML = '<h4>Otomatik yedekler</h4><p class="rtxt">Henüz yedek yok. Her gün 19:07\'den sonra, uygulama açıkken otomatik alınır.</p>'; return; }
+  el.innerHTML = '<h4>Otomatik yedekler (son ' + a.length + ')</h4>' + a.map(x => '<div class="snap"><span>' + dmy(x.d) + ' ' + new Date(x.t).toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'}) + ' · ' + esc(x.l) + ' · ' + x.e.length + ' kayıt</span><button data-k="' + x.k + '">Geri yükle</button></div>').join('');
+}
+document.getElementById('snaps').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const k = b.dataset.k;
+  if (b.dataset.ask === '1') {
+    const x = loadSnaps().find(z => z.k === k); if (!x) return;
+    snapshotNow('Geri yüklemeden önce');
+    entries = JSON.parse(JSON.stringify(x.e)); persist(); rveil.classList.remove('open'); render(); return;
+  }
+  renderSnaps();
+  document.querySelectorAll('#snaps button').forEach(nb => { if (nb.dataset.k === k) { nb.dataset.ask = '1'; nb.className = 'ask'; nb.textContent = 'Emin misin?'; } });
+});
 document.getElementById('rcancel').addEventListener('click', () => rveil.classList.remove('open'));
 rveil.addEventListener('click', e => { if (e.target === rveil) rveil.classList.remove('open'); });
 [rsm, rsy].forEach(b => b.addEventListener('click', () => {
   if (b.dataset.ask === '1') {
+    snapshotNow('Sıfırlama öncesi');
     entries = entries.filter(e => !e.date.startsWith(b.dataset.pre));
     persist(); rveil.classList.remove('open'); render(); return;
   }
@@ -470,7 +496,6 @@ async function press(k){
 document.getElementById('pad').addEventListener('click', e => { const b = e.target.closest('button'); if (b) press(b.dataset.k); });
 document.getElementById('lockbtn').addEventListener('click', lockNow);
 document.addEventListener('visibilitychange', () => { if (document.hidden) hid = Date.now(); else { checkBackup(); if (hid && Date.now() - hid > 120000) lockNow(); } });
-document.getElementById('bkbtn').addEventListener('click', () => document.getElementById('csv').click());
 setInterval(checkBackup, 60000);
 drawDots();
 try { if (sessionStorage.getItem('cm-ok') === '1') { applyRole(sessionStorage.getItem('cm-role') || 'entry'); lockEl.classList.remove('on'); } } catch (e) {}
