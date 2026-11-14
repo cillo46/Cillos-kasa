@@ -209,7 +209,7 @@ body>*:not(.report){display:none!important}
 <div class="veil" id="rveil">
   <div class="sheet" role="dialog" aria-modal="true">
     <h3>Sıfırla</h3>
-    <p class="rtxt">Seçili günün ayı ve yılı baz alınır. Silinen kayıtlar geri gelmez, önce CSV yedek almanı öneririm.</p>
+    <p class="rtxt">Seçili günün ayı ve yılı baz alınır. Sıfırlamadan önce yedek dosyası paylaşma ekranında açılır, Mail'i seçip kendine gönder. Gönderme iptal edilirse kayıtlar silinmez.</p>
     <button class="rbtn" id="rsm"></button>
     <button class="rbtn" id="rsy"></button>
     <div class="snaps" id="snaps"></div>
@@ -451,10 +451,34 @@ document.getElementById('snaps').addEventListener('click', e => {
 });
 document.getElementById('rcancel').addEventListener('click', () => rveil.classList.remove('open'));
 rveil.addEventListener('click', e => { if (e.target === rveil) rveil.classList.remove('open'); });
-[rsm, rsy].forEach(b => b.addEventListener('click', () => {
+async function sendBackup(list, pre){
+  const rows = [['Tarih','Tür','Tutar CHF','Not']].concat(
+    list.slice().sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts)
+      .map(e => [e.date, LABELS[e.type].name, e.amount.toFixed(2), '"' + (e.note || '').replace(/"/g,'""') + '"']));
+  const text = '\ufeff' + rows.map(r => r.join(';')).join('\n');
+  const name = 'muhasebe-' + pre + '.csv';
+  try {
+    const f = new File([text], name, {type:'text/csv'});
+    if (navigator.canShare && navigator.canShare({files:[f]})) {
+      await navigator.share({files:[f], title:'Cillo’s Muhasebe yedek ' + pre, text:'Muhasebe yedeği: ' + pre});
+      return true;
+    }
+  } catch (e) { if (e && e.name === 'AbortError') return false; }
+  try {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type:'text/csv'})); a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  } catch (e) {}
+  return true;
+}
+[rsm, rsy].forEach(b => b.addEventListener('click', async () => {
   if (b.dataset.ask === '1') {
+    const pre = b.dataset.pre;
+    const part = entries.filter(e => e.date.startsWith(pre));
+    const ok = await sendBackup(part, pre);
+    if (!ok) { resetLabels(); b.textContent = 'Yedek gönderilmedi, sıfırlanmadı'; return; }
     snapshotNow('Sıfırlama öncesi');
-    entries = entries.filter(e => !e.date.startsWith(b.dataset.pre));
+    entries = entries.filter(e => !e.date.startsWith(pre));
     persist(); rveil.classList.remove('open'); render(); return;
   }
   resetLabels();
